@@ -83,7 +83,7 @@ npm run tauri:build
 
 - 数据存储在用户数据目录下的`sensitive-info-tool`文件夹
 - 所有敏感信息都经过加密处理
-- 支持数据的导入导出功能
+
 
 ## 开发说明
 
