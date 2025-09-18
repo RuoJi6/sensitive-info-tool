@@ -1,0 +1,113 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            suffix: .exe
+            name: windows-x64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            suffix: ""
+            name: macos-intel
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            suffix: ""
+            name: macos-arm64
+
+    runs-on: ${{ matrix.platform.os }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform.target }}
+
+      - name: Install dependencies (Ubuntu)
+        if: matrix.platform.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            src-tauri/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build and Release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.event.inputs.version || github.ref_name }}
+          releaseName: '敏感信息管理工具 ${{ github.event.inputs.version || github.ref_name }}'
+          releaseBody: |
+            ## 🎉 新版本发布
+
+            ### ✨ 主要功能
+            - 🔐 **安全存储**: 使用加密算法保护敏感信息
+            - 📱 **多平台支持**: 支持微信小程序、企业微信、飞书、钉钉
+            - 🛠️ **利用工具**: 内置API测试和利用功能  
+            - 💻 **桌面应用**: 基于Tauri构建的跨平台桌面应用
+            - 🎨 **现代UI**: 使用Vue 3 + Ant Design Vue构建
+
+            ### 📦 下载文件说明
+            | 平台 | 文件类型 | 系统要求 |
+            |------|----------|----------|
+            | Windows | `.msi` | Windows 10+ |
+            | macOS Intel | `.dmg` | macOS 10.15+ |
+            | macOS ARM | `.dmg` | macOS 11.0+ |
+
+            ### ⚠️ 重要提醒
+            - 本工具仅用于合法的渗透测试和安全研究
+            - 请确保你有权限测试目标系统
+            - 使用前请遵守相关法律法规
+
+            ### 🔗 更多信息
+            - [使用文档](https://github.com/${{ github.repository }}/blob/main/README.md)
+            - [构建说明](https://github.com/${{ github.repository }}/blob/main/build-instructions.md)
+            - [问题反馈](https://github.com/${{ github.repository }}/issues)
+          releaseDraft: false
+          prerelease: false
+          includeDebug: false
+          includeRelease: true
+          args: --target ${{ matrix.platform.target }}
+
